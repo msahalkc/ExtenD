@@ -1,0 +1,26 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Needs an Xcode new enough for this project (developed with Xcode 27).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build Mac app
+        run: xcodebuild -project ExtenD.xcodeproj -scheme ExtenDMac -destination generic/platform=macOS -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Build iPad app
+        run: xcodebuild -project ExtenD.xcodeproj -scheme ExtenDPad -destination generic/platform=iOS -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Test
+        run: xcodebuild -project ExtenD.xcodeproj -scheme ExtenDTests -destination platform=macOS -derivedDataPath build CODE_SIGNING_ALLOWED=NO test

@@ -1,0 +1,6 @@
+// Copy to Config/Local.xcconfig (gitignored) and fill in.
+// Team ID: Xcode → Settings → Accounts. A free Apple ID ("Personal Team") works;
+// iPad builds signed that way expire after 7 days.
+DEVELOPMENT_TEAM = YOURTEAMID
+// Bundle IDs are unique across teams: use a reverse domain you own (or your name).
+BUNDLE_ID_PREFIX = com.example.extend

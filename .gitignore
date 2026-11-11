@@ -1,0 +1,9 @@
+build/
+ExtenD.xcodeproj/
+.DS_Store
+xcuserdata/
+Config/Local.xcconfig
+# Private working notes (kept locally, not published)
+CLAUDE.md
+NOTES.md
+QUESTIONNAIRE.md

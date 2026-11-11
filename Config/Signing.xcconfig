@@ -1,0 +1,8 @@
+// Signing for local builds. Put your own values in Config/Local.xcconfig (gitignored):
+//   cp Config/Local.xcconfig.example Config/Local.xcconfig
+// Without a team, build with CODE_SIGNING_ALLOWED=NO or pick a team in Xcode.
+DEVELOPMENT_TEAM =
+// Bundle IDs are $(BUNDLE_ID_PREFIX).mac / .pad. Bundle IDs are unique across Apple teams, so
+// if you sign with your own team, set your own prefix in Local.xcconfig.
+BUNDLE_ID_PREFIX = com.msahalkc.extend
+#include? "Local.xcconfig"
