@@ -2,6 +2,8 @@
 
 ExtenD's own code is under the [MIT License](LICENSE). It has no third-party code dependencies; it uses only Apple's system frameworks.
 
+The website in `site/` self-hosts the **Anton** typeface (Copyright 2020 The Anton Project Authors), licensed under the SIL Open Font License 1.1: see [site/fonts/OFL.txt](site/fonts/OFL.txt).
+
 The repository includes third-party **test data** in `Tests/Resources/noise-vectors.json`: official Noise Protocol test vectors for `Noise_XX_25519_AESGCM_SHA256`, filtered from the two projects below and otherwise unmodified. They are used only by the unit tests and are not part of the apps.
 
 ---
