@@ -107,6 +107,8 @@ final class AppModel: ObservableObject {
     private var candidate: Session?
     private var candidateGate: PairingGate?
     private var candidateDeviceID: Int?
+    /// When each plugged-in device may be tried again as a hand-over candidate.
+    private var candidateRetry: [Int: Date] = [:]
 
     private var lastKeyframeRequest = Date.distantPast
     private var pendingHello: DispatchWorkItem?
@@ -150,7 +152,8 @@ final class AppModel: ObservableObject {
         if let serial { serials[id] = serial }
         if session == nil { status = "iPad on USB. Open the iPad app…" }
         if session?.isWiFi == true, gate?.isActive == true {
-            startCandidate(deviceID: id)   // the cable is faster: try to hand the Wi-Fi session over
+            candidateRetry[id] = nil
+            seekUSBHandOver()   // the cable is faster: try to hand the Wi-Fi session over
         } else {
             tryConnect()
         }
@@ -160,6 +163,7 @@ final class AppModel: ObservableObject {
         attachedDevices.removeAll { $0 == id }
         if let serial = serials.removeValue(forKey: id) { forgottenWhileAttached.remove(serial) }   // replug = fresh start
         if id == candidateDeviceID { discardCandidate() }
+        candidateRetry[id] = nil
         if id == sessionDeviceID { session?.close() }
         if id == displayDeviceID, session == nil {
             // Unplugged: with Wi-Fi on, give the iPad a moment to come back over Wi-Fi.
@@ -494,8 +498,13 @@ final class AppModel: ObservableObject {
         DispatchQueue.global().async {
             let fd = USBMux.openTunnel(deviceID: deviceID, port: WireConst.port)
             DispatchQueue.main.async {
-                guard let fd else { self.candidateDeviceID = nil; return }   // e.g. an iPhone: stay on Wi-Fi
+                guard let fd else {   // ExtenD not listening on it (yet), or e.g. an iPhone: stay on Wi-Fi
+                    if self.candidateDeviceID == deviceID { self.candidateDeviceID = nil }
+                    self.retryCandidate(deviceID, after: Self.tunnelRetry)
+                    return
+                }
                 guard self.candidateDeviceID == deviceID, self.session?.isWiFi == true, self.peer?.publicKey == current else {
+                    if self.candidateDeviceID == deviceID { self.candidateDeviceID = nil }
                     Darwin.close(fd)
                     return
                 }
@@ -529,6 +538,7 @@ final class AppModel: ObservableObject {
                     self.candidate = nil
                     self.candidateGate = nil
                     self.candidateDeviceID = nil
+                    self.retryCandidate(deviceID, after: Self.mismatchRetry)
                 }
                 self.candidate = c
                 c.start()
@@ -568,11 +578,33 @@ final class AppModel: ObservableObject {
     }
 
     private func discardCandidate() {
-        let c = candidate
+        let c = candidate, id = candidateDeviceID
         candidate = nil
         candidateGate = nil
         candidateDeviceID = nil
         c?.close()
+        if let id { retryCandidate(id, after: Self.mismatchRetry) }
+    }
+
+    /// Retry a device whose tunnel didn't open (the iPad app may still be starting) soon; one that
+    /// opened but didn't authenticate as this iPad (another device, or a refusal) only rarely.
+    private static let tunnelRetry: TimeInterval = 2
+    private static let mismatchRetry: TimeInterval = 30
+
+    private func retryCandidate(_ deviceID: Int, after delay: TimeInterval) {
+        guard attachedDevices.contains(deviceID) else { return }
+        candidateRetry[deviceID] = Date().addingTimeInterval(delay)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.seekUSBHandOver() }
+    }
+
+    /// While a Wi-Fi session is active, keep looking for the same iPad on a cable, including one that
+    /// was already plugged in when the Wi-Fi session started (not just a new attach).
+    private func seekUSBHandOver() {
+        guard session?.isWiFi == true, gate?.isActive == true, candidate == nil, candidateDeviceID == nil else { return }
+        let now = Date()
+        if let id = usbCandidates.first(where: { (candidateRetry[$0] ?? .distantPast) <= now }) {
+            startCandidate(deviceID: id)
+        }
     }
 
     // MARK: Pairing (ADR-001 §2.3–2.4)
@@ -656,6 +688,10 @@ final class AppModel: ObservableObject {
                 displayGrace?.cancel()
                 if session.isWiFi { wifiConnectedName = peer.name }
                 isActive = true
+                if session.isWiFi {
+                    candidateRetry = [:]
+                    DispatchQueue.main.async { self.seekUSBHandOver() }   // a cable may already be in
+                }
                 log.info("Session active (save: \(save), Wi-Fi: \(session.isWiFi))")
                 status = "Connected to \(peer.name). Waiting for screen size…"
             case .reject:
