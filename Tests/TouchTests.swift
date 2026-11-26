@@ -122,4 +122,20 @@ final class TouchTests: XCTestCase {
         XCTAssertGreaterThan(d.dy, 0)
         XCTAssertEqual(d.dx / d.dy, -0.75, accuracy: 1e-9)
     }
+
+    // MARK: Edge to edge (Hello full size, displayLayout)
+
+    func testHelloFullSizeIsOptionalAndValidated() throws {
+        let old = try JSONDecoder().decode(Hello.self, from: Data(#"{"pixelWidth":2720,"pixelHeight":2016}"#.utf8))
+        XCTAssertNil(old.fullSize)   // an older iPad: the Mac must not send displayLayout
+        var h = Hello(pixelWidth: 2720, pixelHeight: 2016)
+        h.fullPixelWidth = 2752
+        h.fullPixelHeight = 2064
+        let back = try JSONDecoder().decode(Hello.self, from: JSONEncoder().encode(h))
+        XCTAssertEqual(back.fullSize?.pixelWidth, 2752)
+        XCTAssertEqual(back.fullSize?.pixelHeight, 2064)
+        h.fullPixelWidth = 100_000
+        XCTAssertNil(h.fullSize)     // out of range: fall back to the inset size
+        XCTAssertEqual(PacketType.displayLayout.maxPayload, 1)
+    }
 }

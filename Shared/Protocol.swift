@@ -25,6 +25,10 @@ enum WireConst {
 enum PacketType: UInt8 {
     case videoConfig     = 1   // Mac → iPad: [u16 spsLen][sps][u16 ppsLen][pps]
     case videoFrame      = 2   // Mac → iPad: [u8 isKey][H.264 AVCC data, 4-byte NAL lengths]
+    /// Mac → iPad, before the video of a (re)built display: [u8 1 = edge to edge, 0 = inset].
+    /// Sent only to iPads whose Hello has `fullPixelWidth`/`fullPixelHeight` (older iPads would
+    /// treat an unknown type as a protocol violation).
+    case displayLayout   = 3
     case hello           = 10  // iPad → Mac: JSON Hello
     case input           = 11  // iPad → Mac: JSON InputEvent
     case keyframeRequest = 12  // iPad → Mac: empty
@@ -41,6 +45,7 @@ enum PacketType: UInt8 {
         case .videoFrame:      return 16 * 1024 * 1024
         case .hello, .input:   return 1024
         case .keyframeRequest: return 0
+        case .displayLayout: return 1
         case .trustState, .pairDecision: return 1
         case .pairCommit, .pairNonce, .pairReveal: return PairingGate.nonceLength
         }
@@ -56,8 +61,20 @@ enum ProtocolError: Error {
 }
 
 struct Hello: Codable {
+    /// The area inside the rounded corners and safe area (always fully visible).
     var pixelWidth: Int
     var pixelHeight: Int
+    /// The whole screen, for edge to edge (the Mac's corners are slightly clipped). Present only
+    /// from iPads that understand `displayLayout`; older Macs ignore these keys.
+    var fullPixelWidth: Int? = nil
+    var fullPixelHeight: Int? = nil
+
+    /// The full-screen size, if sent and valid.
+    var fullSize: Hello? {
+        guard let w = fullPixelWidth, let h = fullPixelHeight else { return nil }
+        let full = Hello(pixelWidth: w, pixelHeight: h)
+        return full.isValid ? full : nil
+    }
 
     /// Accepted display size range in pixels (largest iPad today is 2752×2064).
     static let pixelRange = 256...8192

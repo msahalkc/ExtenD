@@ -58,6 +58,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var displayScale =
         DisplayScale(rawValue: UserDefaults.standard.string(forKey: "DisplayScale") ?? "") ?? .standard
 
+    /// Fill the whole iPad screen (no black border; the Mac's corners are slightly clipped by the
+    /// iPad's rounded corners). Needs an iPad build that reports its full size.
+    @Published private(set) var edgeToEdge = UserDefaults.standard.bool(forKey: "EdgeToEdge")
+
     enum DisplayScale: String, CaseIterable, Identifiable {
         case standard, larger, largest
         var id: String { rawValue }
@@ -174,6 +178,13 @@ final class AppModel: ObservableObject {
         guard scale != displayScale else { return }
         displayScale = scale
         UserDefaults.standard.set(scale.rawValue, forKey: "DisplayScale")
+        if let h = lastHello, encoder != nil, gate?.isActive == true { startPipeline(h) }
+    }
+
+    func setEdgeToEdge(_ on: Bool) {
+        guard on != edgeToEdge else { return }
+        edgeToEdge = on
+        UserDefaults.standard.set(on, forKey: "EdgeToEdge")
         if let h = lastHello, encoder != nil, gate?.isActive == true { startPipeline(h) }
     }
 
@@ -752,9 +763,13 @@ final class AppModel: ObservableObject {
 
     private func startPipeline(_ hello: Hello) {
         lastHello = hello
+        // Edge to edge only with an iPad that can show it; it learns the layout before the video.
+        let full = hello.fullSize
+        let area = edgeToEdge ? full ?? hello : hello
         let f = displayScale.factor
-        let w = Int(Double(hello.pixelWidth) / f) & ~1, h = Int(Double(hello.pixelHeight) / f) & ~1   // even sizes
+        let w = Int(Double(area.pixelWidth) / f) & ~1, h = Int(Double(area.pixelHeight) / f) & ~1   // even sizes
         guard w > 0, h > 0, let s = session else { return }
+        if full != nil { s.send(.displayLayout, Data([edgeToEdge ? 1 : 0])) }
         let sameSize = currentSize.map { $0 == (w, h) } ?? false
         if sameSize, display != nil, encoder != nil {   // e.g. a repeated Hello: just refresh
             encoder?.requestKeyFrame()

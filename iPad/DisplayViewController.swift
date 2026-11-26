@@ -73,21 +73,33 @@ final class DisplayViewController: UIViewController {
                                                queue: .main) { [weak self] _ in self?.connection.start() }
     }
 
-    /// Where the Mac display is drawn: inside the safe area and clear of the rounded screen corners,
-    /// so every Mac pixel (menu bar indicators, window corners) is visible. Touches map to this rect.
-    private var contentRect: CGRect {
+    /// Edge to edge, as chosen on the Mac (`displayLayout`): the whole screen, corners slightly clipped.
+    private var edgeToEdge = false
+
+    /// Where the Mac display is drawn, and where touches map to.
+    private var contentRect: CGRect { edgeToEdge ? fullRect : insetRect }
+
+    /// The whole screen, in whole even pixels.
+    private var fullRect: CGRect { Self.evenPixels(view.bounds, scale: traitCollection.displayScale) }
+
+    private static func evenPixels(_ rect: CGRect, scale: CGFloat) -> CGRect {
+        var r = rect
+        r.size.width = CGFloat(Int(r.width * scale) & ~1) / scale
+        r.size.height = CGFloat(Int(r.height * scale) & ~1) / scale
+        return r
+    }
+
+    /// Inside the safe area and clear of the rounded screen corners, so every Mac pixel (menu bar
+    /// indicators, window corners) is visible.
+    private var insetRect: CGRect {
         // A rectangle inset by ~0.3·r on every side never touches a corner of radius r. iPad display
         // corners are ≈18 pt, so 6 pt clears them; the safe area wins where it's larger.
         let corner: CGFloat = 6
         let s = view.safeAreaInsets
         let inset = UIEdgeInsets(top: max(s.top, corner), left: max(s.left, corner),
                                  bottom: max(s.bottom, corner), right: max(s.right, corner))
-        let scale = traitCollection.displayScale
-        var r = view.bounds.inset(by: inset)
         // Whole, even pixel sizes so the Mac's virtual display matches exactly.
-        r.size.width = CGFloat(Int(r.width * scale) & ~1) / scale
-        r.size.height = CGFloat(Int(r.height * scale) & ~1) / scale
-        return r
+        return Self.evenPixels(view.bounds.inset(by: inset), scale: traitCollection.displayScale)
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -127,6 +139,8 @@ final class DisplayViewController: UIViewController {
         UIApplication.shared.isIdleTimerDisabled = isConnected   // auto-lock only while disconnected
         switch state {
         case .waiting:
+            edgeToEdge = false   // each Mac says again (an older Mac never does)
+            view.setNeedsLayout()
             showStatus(connection.wifiEnabled ? "Waiting for your Mac (USB or Wi-Fi)…" : "Waiting for Mac over USB…")
             renderer.reset()
         case .securing:
@@ -223,15 +237,23 @@ final class DisplayViewController: UIViewController {
     }
 
     private func sendHello() {
+        // Both sizes: the Mac picks inset or edge to edge (its menu setting) and tells us which.
         let scale = traitCollection.displayScale
-        let r = contentRect
+        let r = insetRect, f = fullRect
         let w = Int(r.width * scale), h = Int(r.height * scale)
-        guard w > 0, h > 0, let data = try? jsonEncoder.encode(Hello(pixelWidth: w, pixelHeight: h)) else { return }
+        var hello = Hello(pixelWidth: w, pixelHeight: h)
+        hello.fullPixelWidth = Int(f.width * scale)
+        hello.fullPixelHeight = Int(f.height * scale)
+        guard w > 0, h > 0, let data = try? jsonEncoder.encode(hello) else { return }
         connection.send(.hello, data)
     }
 
     private func handle(_ type: PacketType, _ payload: Data) {
         switch type {
+        case .displayLayout:
+            guard let mode = payload.first, edgeToEdge != (mode == 1) else { return }
+            edgeToEdge = mode == 1
+            view.setNeedsLayout()   // the video layer moves to the new rect (touches follow)
         case .videoConfig: renderer.setConfig(payload)
         case .videoFrame:
             if renderer.display(payload) {

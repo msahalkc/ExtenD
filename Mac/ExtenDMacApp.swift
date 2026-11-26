@@ -174,6 +174,9 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
             .help("Larger makes buttons and text bigger and easier to touch. The image gets slightly softer.")
+            Toggle("Edge to edge on iPad", isOn: Binding(get: { model.edgeToEdge },
+                                                         set: { model.setEdgeToEdge($0) }))
+                .help("Fill the whole iPad screen, with no black border. The iPad's rounded corners hide a few pixels at the Mac screen's corners.")
 
             Divider()
             Text("Paired iPads").font(.subheadline.weight(.semibold))

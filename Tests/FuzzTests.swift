@@ -185,6 +185,6 @@ final class ProtocolLimitTests: XCTestCase {
             XCTAssertTrue(t.isPairing)
             XCTAssertLessThanOrEqual(t.maxPayload, 32)
         }
-        for t in [PacketType.videoConfig, .videoFrame, .hello, .input, .keyframeRequest] { XCTAssertFalse(t.isPairing) }
+        for t in [PacketType.videoConfig, .videoFrame, .displayLayout, .hello, .input, .keyframeRequest] { XCTAssertFalse(t.isPairing) }
     }
 }
